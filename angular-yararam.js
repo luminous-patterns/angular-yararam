@@ -8,10 +8,125 @@
 
 (function (window, angular, undefined) {'use strict';
 
-angular.module('ngYararam', ['ng']);
+angular.module('ngYararamSync', ['ng']);
 
-$YararamModel.$inject = ['$http', '$q'];
-function $YararamModel (  $http,   $q) {
+$YararamSync.$inject = ['$http', '$q'];
+function $YararamSync (  $http,   $q) {
+
+    function $sync (model, method, options) {
+
+        if (model.syncing) {
+            return $q(angular.noop).then(function () {
+                return model;
+            });
+        }
+
+        var url = method !== 'create' ? model.getEndpoint() : model.getRootEndpoint();
+        var data = model.attributes;
+
+        model.syncing = true;
+
+        switch (method) {
+
+            case 'load':
+                return $http
+                    .get(url)
+                    .then(
+                        onComplete.bind(model), 
+                        onError.bind(model)
+                    );
+
+            case 'save':
+                return $http
+                    .put(url, data)
+                    .then(
+                        onComplete.bind(window, model, options), 
+                        onError.bind(window, model, options)
+                    );
+
+            case 'create':
+                return $http
+                    .post(url, data)
+                    .then(
+                        onComplete.bind(window, model, options), 
+                        onError.bind(window, model, options)
+                    );
+
+            case 'delete':
+                return $http
+                    .delete(url)
+                    .then(
+                        onComplete.bind(window, model, options), 
+                        onError.bind(window, model, options)
+                    );
+
+        }
+
+    }
+
+    function onComplete (model, response, options) {
+
+        model.syncing = false;
+
+        // Update the model attributes to match the server
+        model.attributes = model.parse(response.data);
+
+        // Update the previous attributes
+        model._previousAttributes = angular.copy(model.attributes);
+
+        var idAttribute = model.idAttribute;
+
+        if (idAttribute) {
+            setID(model, response.data[idAttribute]);
+        }
+
+        if (options.onComplete) {
+            options.onComplete(model, response);
+        }
+
+        return model;
+
+    }
+
+    function onError (model, response, options) {
+
+        model.syncing = false;
+
+        // Update the model attributes to match the server
+        model.attributes = model.parse(response.data);
+
+        // Update the previous attributes
+        model._previousAttributes = angular.copy(model.attributes);
+
+        var idAttribute = model.idAttribute;
+
+        if (idAttribute) {
+            setID(model, response.data[idAttribute]);
+        }
+
+        // Emit a 'sync' event on this model
+        model.$emit('sync');
+
+        if (options.onComplete) {
+            options.onComplete(model, response);
+        }
+
+        return model;
+
+    }
+
+    return {
+        $sync: $sync,
+    };
+
+}
+
+angular.module('ngYararamSync').service('$YararamSync', $YararamSync);
+
+angular.module('ngYararam', ['ngYararamSync']);
+
+$YararamModel.$inject = ['$YararamSync', '$q'];
+function $YararamModel (  $YararamSync,   $q) {
 
     var array = [];
     var slice = array.slice;
@@ -60,70 +175,11 @@ function $YararamModel (  $http,   $q) {
 
     }
 
-    // This is the main function used when syncing the model with the server
-    function sync(model, method) {
-
-        if (model.syncing) {
-            return $q(angular.noop).then(function() {
-                return model;
-            });
-        }
-
-        var url = method !== 'create' ? model.getEndpoint() : model.getRootEndpoint();
-        var data = model.parse(model.attributes);
-
-        var onComplete = function(response) {
-
-            model.syncing = false;
-
-            if (method === 'delete') {
-                return deleteModel(model);
-            }
-
-            // Update the model attributes to match the server
-            model.attributes = model.parse(response.data);
-
-            // Update the previous attributes
-            model._previousAttributes = angular.copy(model.attributes);
-
-            var idAttribute = model.idAttribute;
-
-            if (idAttribute) {
-                setID(model, response.data[idAttribute]);
-            }
-
-            // Emit a 'sync' event on this model
-            model.$emit('sync');
-
-            return model;
-
-        };
-
-        model.syncing = true;
-
-        switch (method) {
-
-            case 'load':
-                return $http.get(url).then(onComplete);
-
-            case 'save':
-                return $http.post(url, data).then(onComplete);
-
-            case 'create':
-                return $http.post(url, data).then(onComplete);
-
-            case 'delete':
-                return $http.delete(url).then(onComplete);
-
-        }
-
-    }
-
-    function setID(model, ID) {
+    function setID (model, ID) {
         model.id = ID;
     }
 
-    function deleteModel(model) {
+    function deleteModel (model) {
         model.attributes = {};
         model._previousAttributes = {};
         model.id = null;
@@ -131,64 +187,91 @@ function $YararamModel (  $http,   $q) {
         return this;
     }
 
-    YararamModel.prototype.getEndpoint = function() {
+    YarramModel.prototype.onSyncSuccess = function (response) {
+        var attrs = this.parse(response);
+        if (angular.isObject(attrs)) {
+            // @TODO: update attributes
+        }
+    };
+
+    YarramModel.prototype.onSyncError = function () {
+        // @TODO: handle error
+    };
+
+    YararamModel.prototype.getEndpoint = function () {
         return this.getRootEndpoint() + '/' + this.id;
     };
 
-    YararamModel.prototype.getRootEndpoint = function() {
+    YararamModel.prototype.getRootEndpoint = function () {
         return this.endPoint;
     };
 
-    YararamModel.prototype.parse = function(data) {
-        return angular.extend({}, data);
+    YararamModel.prototype.parse = function (response, options) {
+        return response;
     };
 
-    YararamModel.prototype.isNew = function() {
+    YararamModel.prototype.$isNew = function () {
         return this.id ? false : true;
     };
 
-    YararamModel.prototype.get = function(attr) {
+    YararamModel.prototype.$get = function (attr) {
         return attr in this.attributes ? this.attributes[attr] : null;
     };
 
-    YararamModel.prototype.set = function(attr, val) {
+    YararamModel.prototype.$set = function (attr, val) {
         this.attributes[attr] = val;
         return this;
     };
 
-    YararamModel.prototype.undoChanges = function() {
+    YararamModel.prototype.$undoChanges = function () {
         this.attributes = angular.copy(this._previousAttributes);
         return this;
     };
 
-    YararamModel.prototype.$delete = function() {
+    YararamModel.prototype.$sync = function () {
+        return $YararamSync.$sync.apply(this, arguments);
+    };
+
+    YararamModel.prototype.$delete = function () {
         if (!this.id) {
             return deleteModel(this);
         }
-        return sync(this, 'delete');
+        return this.$sync('delete');
     };
 
-    YararamModel.prototype.$save = function() {
+    YararamModel.prototype.$save = function (options) {
 
-        if (this.isNew()) {
-            return sync(this, 'create');
+        var method = 'save';
+
+        if (this.$isNew()) {
+            method = 'create';
         }
 
-        return sync(this, 'save');
+        return this
+            .$sync(method, options)
+            .then(
+                this.onSyncSuccess.bind(this, options),
+                this.onSyncError.bind(this, options)
+            );
 
     };
 
-    YararamModel.prototype.$load = function() {
+    YararamModel.prototype.$load = function (options) {
 
-        if (this.isNew()) {
+        if (this.$isNew()) {
             return $q(angular.noop);
         }
 
-        return sync(this, 'load');
+        return this
+            .$sync('load')
+            .then(
+                this.onSyncSuccess.bind(this, options),
+                this.onSyncError.bind(this, options)
+            );
 
     };
 
-    YararamModel.prototype.$on = function(eventName, callback, context) {
+    YararamModel.prototype.$on = function (eventName, callback, context) {
 
         var cache = this._events;
 
@@ -202,7 +285,7 @@ function $YararamModel (  $http,   $q) {
 
     };
 
-    YararamModel.prototype.$off = function(eventName, callback) {
+    YararamModel.prototype.$off = function (eventName, callback) {
 
         var cache = this._events;
 
@@ -210,7 +293,12 @@ function $YararamModel (  $http,   $q) {
             return this;
         }
 
-        angular.forEach(cache[eventName], function(handler, index) {
+        if (null == callback) {
+            delete cache[eventName];
+            return this;
+        }
+
+        angular.forEach(cache[eventName], function (handler, index) {
 
             if (handler[0] === callback) {
                 cache[eventName].splice(index, 1);
@@ -222,7 +310,7 @@ function $YararamModel (  $http,   $q) {
 
     };
 
-    YararamModel.prototype.$emit = function(eventName) {
+    YararamModel.prototype.$emit = function (eventName) {
       
         var args = slice.call(arguments, 1);
         var cache = this._events;
@@ -231,7 +319,7 @@ function $YararamModel (  $http,   $q) {
             return this;
         }
 
-        angular.forEach(cache[eventName], function(handler) {
+        angular.forEach(cache[eventName], function (handler) {
 
             var callback = handler[0];
             var context = handler[1];
@@ -245,15 +333,15 @@ function $YararamModel (  $http,   $q) {
     };
 
     // Set defaults
-    YararamModel.prototype.setDefaults = function(defaults) {
+    YararamModel.prototype.setDefaults = function (defaults) {
 
-        var self = this;
+        var _this = this;
 
         this.defaults = angular.copy(defaults);
 
-        angular.forEach(this.defaults, function(value, key) {
-            if (!self.attributes[key]) {
-                self.attributes[key] = value;
+        angular.forEach(this.defaults, function (value, key) {
+            if (!_this.attributes[key]) {
+                _this.attributes[key] = value;
             }
         });
 
@@ -267,8 +355,8 @@ function $YararamModel (  $http,   $q) {
 
 angular.module('ngYararam').factory('$YararamModel', $YararamModel);
 
-$YararamCollection.$inject = ['$http', '$q'];
-function $YararamCollection (  $http,   $q) {
+$YararamCollection.$inject = ['$YararamSync', '$q'];
+function $YararamCollection (  $YararamSync,   $q) {
 
     var array = [];
     var slice = array.slice;
@@ -302,20 +390,20 @@ function $YararamCollection (  $http,   $q) {
     }
 
     // When a model is deleted
-    var onModelDelete = function(model) {
+    var onModelDelete = function (model) {
 
-        var self = this;
+        var _this = this;
 
         // Find the deleted model
-        angular.forEach(this.models, function(m, index) {
+        angular.forEach(this.models, function (m, index) {
 
             if (m === model) {
 
             // Remove it from this.models
-            self.models.splice(index, 1);
+            _this.models.splice(index, 1);
 
             // Update the collection length property
-            self.length--;
+            _this.length--;
 
             }
 
@@ -324,14 +412,14 @@ function $YararamCollection (  $http,   $q) {
     };
 
     // Get a model from the collection by it's index
-    YararamCollection.prototype.at = function(index) {
+    YararamCollection.prototype.at = function (index) {
         return this.models[index];
     };
 
     // Add a model to the collection
-    YararamCollection.prototype.add = function(model) {
+    YararamCollection.prototype.add = function (model) {
 
-        var self = this;
+        var _this = this;
 
         // Add the model to this.models
         this.models.push(model);
@@ -340,8 +428,8 @@ function $YararamCollection (  $http,   $q) {
         this.length++;
 
         // Listen out for when this model is deleted
-        model.$on('delete', function() {
-            self.$emit('model:delete', model);
+        model.$on('delete', function () {
+            _this.$emit('model:delete', model);
         });
 
         return this;
@@ -349,69 +437,69 @@ function $YararamCollection (  $http,   $q) {
     };
 
     // Return the end point for this collection
-    YararamCollection.prototype.getEndPoint = function() {
+    YararamCollection.prototype.getEndPoint = function () {
         return this.endPoint
             ? this.endPoint
             : this.model.getRootEndpoint();
     };
 
     // Return the query string to append to GET requests
-    YararamCollection.prototype.getQuery = function() {
+    YararamCollection.prototype.getQuery = function () {
         return !_.isEmpty(this.queryStringParts)
             ? '?' + this.getQueryString()
             : '';
     };
 
     // Return the query string
-    YararamCollection.prototype.getQueryString = function() {
-        return _.map(this.queryStringParts, function(v,k) { 
+    YararamCollection.prototype.getQueryString = function () {
+        return _.map(this.queryStringParts, function (v,k) { 
             return k + '=' + encodeURIComponent(v);
         }).join('&');
     };
 
     // Add query string params
-    YararamCollection.prototype.query = function(parts) {
+    YararamCollection.prototype.query = function (parts) {
         this.queryStringParts = _.extend(this.queryStringParts, parts);
         return this;
     };
 
     // Reset the query string params
-    YararamCollection.prototype.resetQuery = function() {
+    YararamCollection.prototype.resetQuery = function () {
         this.queryStringParts = {};
         return this;
     };
 
     // Empty the collection
-    YararamCollection.prototype.empty = function() {
+    YararamCollection.prototype.empty = function () {
         this.models.splice(0, this.length);
         this.length = 0;
         return this;
     };
 
     // Fetch the collection from the server
-    YararamCollection.prototype.$load = function() {
+    YararamCollection.prototype.$load = function () {
 
-        var self = this;
+        var _this = this;
 
         // Prepare the URL where this collection can be fetched from
         var url = this.getEndPoint() + this.getQuery();
 
         // Fetch the collection
-        return $http.get(url).then(function(response) {
+        return $http.get(url).then(function (response) {
 
             var models = response.data;
 
             // Empty the collection
-            self.empty();
+            _this.empty();
 
             // For each model returned by the server
-            angular.forEach(models, function(data) {
+            angular.forEach(models, function (data) {
 
                 // Turn it in to a real model
-                var model = new self.modelClass(data);
+                var model = new _this.modelClass(data);
 
                 // Add it to the collection
-                self.add(model);
+                _this.add(model);
 
             });
 
@@ -420,7 +508,7 @@ function $YararamCollection (  $http,   $q) {
     };
 
     // Bind events
-    YararamCollection.prototype.$on = function(eventName, callback, context) {
+    YararamCollection.prototype.$on = function (eventName, callback, context) {
 
         var cache = this._events;
 
@@ -435,7 +523,7 @@ function $YararamCollection (  $http,   $q) {
     };
 
     // Unbind events
-    YararamCollection.prototype.$off = function(eventName, callback) {
+    YararamCollection.prototype.$off = function (eventName, callback) {
 
         var cache = this._events;
 
@@ -443,10 +531,15 @@ function $YararamCollection (  $http,   $q) {
             return this;
         }
 
-        angular.forEach(cache[eventName], function(handler, index) {
+        if (null == callback) {
+            delete cache[eventName];
+            return this;
+        }
+
+        angular.forEach(cache[eventName], function (handler, index) {
 
             if (handler[0] === callback) {
-            cache[eventName].splice(index, 1);
+                cache[eventName].splice(index, 1);
             }
 
         });
@@ -456,7 +549,7 @@ function $YararamCollection (  $http,   $q) {
     };
 
     // Emit events
-    YararamCollection.prototype.$emit = function(eventName) {
+    YararamCollection.prototype.$emit = function (eventName) {
 
         var args = slice.call(arguments, 1);
         var cache = this._events;
@@ -465,7 +558,7 @@ function $YararamCollection (  $http,   $q) {
             return this;
         }
 
-        angular.forEach(cache[eventName], function(handler) {
+        angular.forEach(cache[eventName], function (handler) {
 
             var callback = handler[0];
             var context = handler[1];
