@@ -134,112 +134,112 @@ function $YararamModel (  $YararamSync,   $q) {
     function YararamModel () {
 
         // The name of the ID attribute property for the model
-        this.idAttribute = 'ID';
+        this.$idAttribute = 'ID';
 
         // The RESTful end point for the model
-        this.endPoint = '';
+        this.$endPoint = '';
 
         // The model's unique ID
-        this.id = null;
+        this.$id = null;
 
         // Keep track of syncing
-        this.syncing = false;
+        this.$syncing = false;
 
         // Event handler cache
-        this._events = {};
+        this.$events = {};
 
         // Defaults
-        this.defaults = {};
+        this.$defaults = {};
 
         // Are we creating a new model or loading an existing one
         if (arguments.length < 1) {
-            this.attributes = {};
+            this.$attributes = {};
         }
         else {
 
             if (typeof arguments[0] === 'object') {
-                this.attributes = this.parse(arguments[0]);
-                if (this.idAttribute in this.attributes) {
-                    setID(this, this.attributes[this.idAttribute]);
+                this.$attributes = this.parse(arguments[0]);
+                if (this.$idAttribute in this.$attributes) {
+                    setID(this, this.$attributes[this.$idAttribute]);
                 }
             }
             else {
                 setID(this, arguments[0]);
-                this.attributes = {};
+                this.$attributes = {};
             }
 
         }
 
         // Keep a copy of the original attributes
-        this._previousAttributes = angular.copy(this.attributes);
+        this.$_previousAttributes = angular.copy(this.$attributes);
 
     }
 
     function setID (model, ID) {
-        model.id = ID;
+        model.$id = ID;
     }
 
     function deleteModel (model) {
-        model.attributes = {};
-        model._previousAttributes = {};
-        model.id = null;
+        model.$attributes = {};
+        model.$_previousAttributes = {};
+        model.$id = null;
         model.$emit('delete');
         return this;
     }
 
-    YarramModel.prototype.onSyncSuccess = function (response) {
+    function $onSyncSuccess (response) {
         var attrs = this.parse(response);
         if (angular.isObject(attrs)) {
             // @TODO: update attributes
         }
-    };
+    }
 
-    YarramModel.prototype.onSyncError = function () {
+    function $onSyncError () {
         // @TODO: handle error
-    };
+    }
 
-    YararamModel.prototype.getEndpoint = function () {
+    function $getEndpoint () {
         return this.getRootEndpoint() + '/' + this.id;
-    };
+    }
 
-    YararamModel.prototype.getRootEndpoint = function () {
+    function $getRootEndpoint () {
         return this.endPoint;
-    };
+    }
 
-    YararamModel.prototype.parse = function (response, options) {
+    function $parse (response, options) {
         return response;
-    };
+    }
 
-    YararamModel.prototype.$isNew = function () {
+    function $isNew () {
         return this.id ? false : true;
-    };
+    }
 
-    YararamModel.prototype.$get = function (attr) {
+    function $get (attr) {
         return attr in this.attributes ? this.attributes[attr] : null;
-    };
+    }
 
-    YararamModel.prototype.$set = function (attr, val) {
+    function $set (attr, val) {
         this.attributes[attr] = val;
         return this;
-    };
+    }
 
-    YararamModel.prototype.$undoChanges = function () {
+    function $undoChanges () {
         this.attributes = angular.copy(this._previousAttributes);
         return this;
-    };
+    }
 
-    YararamModel.prototype.$sync = function () {
+    function $sync () {
         return $YararamSync.$sync.apply(this, arguments);
-    };
+    }
 
-    YararamModel.prototype.$delete = function () {
+    function $delete () {
         if (!this.id) {
             return deleteModel(this);
         }
         return this.$sync('delete');
-    };
+    }
 
-    YararamModel.prototype.$save = function (options) {
+    function $save (options) {
 
         var method = 'save';
 
@@ -254,9 +254,9 @@ function $YararamModel (  $YararamSync,   $q) {
                 this.onSyncError.bind(this, options)
             );
 
-    };
+    }
 
-    YararamModel.prototype.$load = function (options) {
+    function $load (options) {
 
         if (this.$isNew()) {
             return $q(angular.noop);
@@ -269,9 +269,9 @@ function $YararamModel (  $YararamSync,   $q) {
                 this.onSyncError.bind(this, options)
             );
 
-    };
+    }
 
-    YararamModel.prototype.$on = function (eventName, callback, context) {
+    function $on (eventName, callback, context) {
 
         var cache = this._events;
 
@@ -283,13 +283,22 @@ function $YararamModel (  $YararamSync,   $q) {
 
         return this;
 
-    };
+    }
 
-    YararamModel.prototype.$off = function (eventName, callback) {
+    function $off (eventName, callback) {
 
         var cache = this._events;
 
+        if ('*' === eventName) {
+            // Unbind everything
+            for (var ev in this._events) {
+                delete this._events[ev];
+            }
+            return this;
+        }
+
         if (!cache[eventName]) {
+            // No events to unbind
             return this;
         }
 
@@ -308,12 +317,12 @@ function $YararamModel (  $YararamSync,   $q) {
 
         return this;
 
-    };
+    }
 
-    YararamModel.prototype.$emit = function (eventName) {
+    function $emit (eventName) {
       
         var args = slice.call(arguments, 1);
-        var cache = this._events;
+        var cache = this.$events;
 
         if (!cache[eventName]) {
             return this;
@@ -330,10 +339,9 @@ function $YararamModel (  $YararamSync,   $q) {
 
         return this;
 
-    };
+    }
 
-    // Set defaults
-    YararamModel.prototype.setDefaults = function (defaults) {
+    function $setDefaults (defaults) {
 
         var _this = this;
 
@@ -347,7 +355,41 @@ function $YararamModel (  $YararamSync,   $q) {
 
       return this;
 
-    };
+    }
+
+    YararamModel.prototype.$onSyncSuccess = $onSyncSuccess;
+
+    YararamModel.prototype.$onSyncError = $onSyncError;
+
+    YararamModel.prototype.$getEndpoint = $getEndpoint;
+
+    YararamModel.prototype.$getRootEndpoint = $getRootEndpoint;
+
+    YararamModel.prototype.$parse = $parse;
+
+    YararamModel.prototype.$isNew = $isNew;
+
+    YararamModel.prototype.$get = $get;
+
+    YararamModel.prototype.$set = $set;
+
+    YararamModel.prototype.$undoChanges = $undoChanges;
+
+    YararamModel.prototype.$sync = $sync;
+
+    YararamModel.prototype.$delete = $delete;
+
+    YararamModel.prototype.$save = $save;
+
+    YararamModel.prototype.$load = $load;
+
+    YararamModel.prototype.$on = $on;
+
+    YararamModel.prototype.$off = $off;
+
+    YararamModel.prototype.$emit = $emit;
+
+    YararamModel.prototype.$setDefaults = $setDefaults;
 
     return YararamModel;
 
