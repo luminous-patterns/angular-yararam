@@ -21,7 +21,7 @@ function $YararamSync (  $http,   $q) {
             });
         }
 
-        var url = method !== 'create' ? model.getEndpoint() : model.getRootEndpoint();
+        var url = method !== 'create' ? model.$getEndpoint() : model.$getRootEndpoint();
         var data = model.attributes;
 
         model.syncing = true;
@@ -80,11 +80,11 @@ function $YararamSync (  $http,   $q) {
             model.$id = response.data[idAttribute];
         }
 
-        if (options.onComplete) {
+        if (options && options.onComplete) {
             options.onComplete(model, response);
         }
 
-        return model;
+        return response;
 
     }
 
@@ -104,11 +104,11 @@ function $YararamSync (  $http,   $q) {
             model.$id = response.data[idAttribute];
         }
 
-        if (options.onComplete) {
+        if (options && options.onComplete) {
             options.onComplete(model, response);
         }
 
-        return model;
+        return response;
 
     }
 
@@ -199,7 +199,7 @@ function $YararamModel (  $YararamSync,   $q) {
         },
 
         $sync: function () {
-            return $YararamSync.$sync.apply(this, arguments);
+            return ($YararamSync.$sync.bind(window, this)).apply(window, arguments);
         },
 
         $delete: function () {
@@ -257,21 +257,23 @@ function $YararamModel (  $YararamSync,   $q) {
 
         },
 
+        $onSyncSuccess: function (options, response) {
+            var attrs = this.$parse(response.data);
+            if (angular.isObject(attrs)) {
+                this.$attributes = attrs;
+            }
+            return response;
+        },
+
+        $onSyncError: function (options, response) {
+            console.log(arguments);
+            // @TODO: handle error
+        },
+
     });
 
     function $setID (model, ID) {
         model.$id = ID;
-    }
-
-    function $onSyncSuccess (response) {
-        var attrs = this.$parse(response);
-        if (angular.isObject(attrs)) {
-            // @TODO: update attributes
-        }
-    }
-
-    function $onSyncError () {
-        // @TODO: handle error
     }
 
     function $deleteModel (model) {
