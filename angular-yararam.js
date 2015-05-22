@@ -352,9 +352,11 @@ function $YararamCollection (  $YararamSync,   $http,   $q) {
 
         // Return the query string
         $getQueryString: function () {
-            return angular.map(this.$queryStringParts, function (v,k) {
-                return k + '=' + encodeURIComponent(v);
-            }).join('&');
+            var queryStringParts = [];
+            angular.forEach(this.$queryStringParts, function (v, k) {
+                queryStringParts[queryStringParts.length] = k + '=' + encodeURIComponent(v);
+            });
+            return queryStringParts.join('&');
         },
 
         // Add query string params
