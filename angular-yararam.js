@@ -405,6 +405,8 @@ function $YararamCollection (  $YararamSync,   $http,   $q) {
 
                 });
 
+                return response;
+
             });
 
         },
